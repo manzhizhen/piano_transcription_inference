@@ -122,6 +122,68 @@ class PianoTranscription(object):
 
         return transcribed_dict
 
+    def transcribe_to_dict(self, audio):
+        """Transcribe an audio recording to dict.
+
+        Args:
+          audio: (audio_samples)
+
+        Returns:
+          transcribed_dict, dict: {'output_dict':, ..., 'est_note_events': ...}
+
+        """
+        # 将音频转换为1行N列的矩阵形式
+        audio = audio[None, :]  # (1, audio_samples)
+
+        # 用零填充音频使其能够被segment_samples整除
+        # Pad audio to be evenly divided by segment_samples
+        audio_len = audio.shape[1]  # 获取音频的长度
+        # 计算填充的长度
+        pad_len = int(np.ceil(audio_len / self.segment_samples))\
+            * self.segment_samples - audio_len
+
+        # 在音频末尾填充0，使其能够被segment_samples整除
+        audio = np.concatenate((audio, np.zeros((1, pad_len))), axis=1)
+
+        # 分割成片段
+        # Enframe to segments
+        segments = self.enframe(audio, self.segment_samples)
+        """(N, segment_samples)"""
+
+        # 前向传播
+        # Forward
+        output_dict = forward(self.model, segments, batch_size=1)
+        """{'reg_onset_output': (N, segment_frames, classes_num), ...}"""
+
+        # 将输出的帧还原到原始长度
+        # Deframe to original length
+        for key in output_dict.keys():
+            output_dict[key] = self.deframe(output_dict[key])[0 : audio_len]
+        """output_dict: {
+          'reg_onset_output': (N, segment_frames, classes_num), 
+          'reg_offset_output': (N, segment_frames, classes_num), 
+          'frame_output': (N, segment_frames, classes_num), 
+          'velocity_output': (N, segment_frames, classes_num)}"""
+
+        # Post processor
+        post_processor = RegressionPostProcessor(self.frames_per_second,
+            classes_num=self.classes_num, onset_threshold=self.onset_threshold,
+            offset_threshold=self.offset_threshod,
+            frame_threshold=self.frame_threshold,
+            pedal_offset_threshold=self.pedal_offset_threshold)
+
+        # 将输出字典后处理为MIDI事件
+        # Post process output_dict to MIDI events
+        (est_note_events, est_pedal_events) = \
+            post_processor.output_dict_to_midi_events(output_dict)
+
+        transcribed_dict = {
+            'output_dict': output_dict,
+            'est_note_events': est_note_events,
+            'est_pedal_events': est_pedal_events}
+
+        return transcribed_dict
+
     def enframe(self, x, segment_samples):
         """Enframe long sequence to short segments.
 
