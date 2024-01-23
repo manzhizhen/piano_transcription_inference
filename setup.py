@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="piano-transcription-inference-yzq",  # Replace with your own username
+    name="piano-transcription-inference",  # Replace with your own username
     version="0.0.6.dev0",
     author="Qiuqiang Kong",
     author_email="qiuqiangkong@gmail.com",
