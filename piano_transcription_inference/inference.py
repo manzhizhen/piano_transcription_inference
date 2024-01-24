@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 
 from .utilities import (create_folder, get_filename, RegressionPostProcessor, 
-    write_events_to_midi)
+    write_events_to_midi, switch_events_to_midi)
 from .models import Regress_onset_offset_frame_velocity_CRNN, Note_pedal
 from .pytorch_utils import move_data_to_device, forward
 from . import config
@@ -49,7 +49,7 @@ class PianoTranscription(object):
         self.model = Model(frames_per_second=self.frames_per_second, 
             classes_num=self.classes_num)
 
-        # Load model
+        # Load model 加载torch模型
         checkpoint = torch.load(checkpoint_path, map_location=device)
         self.model.load_state_dict(checkpoint['model'], strict=False)
 
@@ -158,7 +158,7 @@ class PianoTranscription(object):
         # 将输出的帧还原到原始长度
         # Deframe to original length
         for key in output_dict.keys():
-            output_dict[key] = self.deframe(output_dict[key])[0 : audio_len]
+            output_dict[key] = self.deframe(output_dict[key])[0: audio_len]
         """output_dict: {
           'reg_onset_output': (N, segment_frames, classes_num), 
           'reg_offset_output': (N, segment_frames, classes_num), 
@@ -176,6 +176,9 @@ class PianoTranscription(object):
         # Post process output_dict to MIDI events
         (est_note_events, est_pedal_events) = \
             post_processor.output_dict_to_midi_events(output_dict)
+
+        # todo 明天把这个midi_file用起来
+        midi_file = switch_events_to_midi(start_time=0, note_events=est_note_events, pedal_events=est_pedal_events)
 
         transcribed_dict = {
             'output_dict': output_dict,

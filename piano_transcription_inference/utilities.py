@@ -169,6 +169,93 @@ def write_events_to_midi(start_time, note_events, pedal_events, midi_path):
     midi_file.save(midi_path)
 
 
+def switch_events_to_midi(start_time, note_events, pedal_events):
+    """Switch out note events to MIDI file.
+
+    Args:
+      start_time: float
+      note_events: list of dict, e.g. [
+        {'midi_note': 51, 'onset_time': 696.63544, 'offset_time': 696.9948, 'velocity': 44},
+        {'midi_note': 58, 'onset_time': 696.99585, 'offset_time': 697.18646, 'velocity': 50}
+        ...]
+      midi_path: str
+
+    Returns:
+      midi_file: MidiFile
+    """
+    from mido import Message, MidiFile, MidiTrack, MetaMessage
+
+    # This configuration is the same as MIDIs in MAESTRO dataset
+    ticks_per_beat = 384
+    beats_per_second = 2
+    ticks_per_second = ticks_per_beat * beats_per_second
+    microseconds_per_beat = int(1e6 // beats_per_second)
+
+    midi_file = MidiFile()
+    # 在 MIDIUtil 库的 MIDIFile 类中，ticks_per_beat 是表示 MIDI 文件中每个四分音符的时间刻度数。在 MIDI 文件中，时间分辨率是以 ticks 来表示的，
+    # 而 ticks_per_beat 属性指定了每个四分音符所包含的 ticks 数。这个属性决定了 MIDI 文件的时间分辨率，即每个四分音符被分成了多少个 ticks。
+    midi_file.ticks_per_beat = ticks_per_beat
+
+    # Track 0 第一个音轨
+    track0 = MidiTrack()
+    # 在`track0`轨道中添加一个元事件，这个元事件表示设置节奏，使用了名为`set_tempo`的元事件类型。`tempo`参数表示每个四分音符的微秒数，`time`参数表示这个元事件发生的时间。
+    track0.append(MetaMessage('set_tempo', tempo=microseconds_per_beat, time=0))
+    # 在`track0`轨道中添加一个时间签名的元事件，用于设置节拍。`numerator`表示拍号的分子，`denominator`表示拍号的分母，`time`表示这个元事件发生的时间。
+    track0.append(MetaMessage('time_signature', numerator=4, denominator=4, time=0))
+    # 添加一个表示轨道结束的元事件，`time`参数表示这个元事件发生的时间。
+    track0.append(MetaMessage('end_of_track', time=1))
+    midi_file.tracks.append(track0)
+
+    # Track 1 第二个音轨
+    track1 = MidiTrack()
+
+    # Message rolls of MIDI
+    message_roll = []
+
+    for note_event in note_events:
+        # Onset
+        message_roll.append({
+            'time': note_event['onset_time'],
+            'midi_note': note_event['midi_note'],
+            'velocity': note_event['velocity']})
+
+        # Offset
+        message_roll.append({
+            'time': note_event['offset_time'],
+            'midi_note': note_event['midi_note'],
+            'velocity': 0})
+
+    if pedal_events:
+        for pedal_event in pedal_events:
+            message_roll.append({'time': pedal_event['onset_time'], 'control_change': 64, 'value': 127})
+            message_roll.append({'time': pedal_event['offset_time'], 'control_change': 64, 'value': 0})
+
+    # Sort MIDI messages by time
+    message_roll.sort(key=lambda note_event: note_event['time'])
+
+    previous_ticks = 0
+    for message in message_roll:
+        # 计算当前消息的时间对应的 ticks 数。`start_time` 是消息的起始时间，`ticks_per_second` 是每秒的 ticks 数。
+        this_ticks = int((message['time'] - start_time) * ticks_per_second)
+        if this_ticks >= 0:
+            # 计算当前消息的时间与上一个消息的时间之间的 ticks 差值。
+            diff_ticks = this_ticks - previous_ticks
+            previous_ticks = this_ticks
+            # 如果消息中包含 `midi_note` 键，表示这是一个音符消息。
+            if 'midi_note' in message.keys():
+                # 将一个表示音符开始的 MIDI 消息添加到 `track1` 中。参数 `note` 是音符的音高，`velocity` 是音符的力度，`time` 是距离上一个事件的时间差。
+                track1.append(Message('note_on', note=message['midi_note'], velocity=message['velocity'], time=diff_ticks))
+            # 如果消息中包含 `control_change` 键，表示这是一个控制变化消息。
+            elif 'control_change' in message.keys():
+                # 将一个表示控制变化的 MIDI 消息添加到 `track1` 中。参数 `control` 是控制器号码，`value` 是控制器的值，`time` 是距离上一个事件的时间差。
+                track1.append(Message('control_change', channel=0, control=message['control_change'], value=message['value'], time=diff_ticks))
+    # 向 `track1` 中添加一个表示轨道结束的元事件。
+    track1.append(MetaMessage('end_of_track', time=1))
+    midi_file.tracks.append(track1)
+
+    return midi_file
+
+
 class RegressionPostProcessor(object):
     def __init__(self, frames_per_second, classes_num, onset_threshold,
         offset_threshold, frame_threshold, pedal_offset_threshold):
