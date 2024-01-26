@@ -122,14 +122,14 @@ class PianoTranscription(object):
 
         return transcribed_dict
 
-    def transcribe_to_dict(self, audio):
-        """Transcribe an audio recording to dict.
+    def transcribe_to_midi(self, audio):
+        """Transcribe an audio recording to MidiFile.
 
         Args:
           audio: (audio_samples)
 
         Returns:
-          transcribed_dict, dict: {'output_dict':, ..., 'est_note_events': ...}
+          midi_file: MidiFile
 
         """
         # 将音频转换为1行N列的矩阵形式
@@ -177,15 +177,9 @@ class PianoTranscription(object):
         (est_note_events, est_pedal_events) = \
             post_processor.output_dict_to_midi_events(output_dict)
 
-        # todo 明天把这个midi_file用起来
         midi_file = switch_events_to_midi(start_time=0, note_events=est_note_events, pedal_events=est_pedal_events)
 
-        transcribed_dict = {
-            'output_dict': output_dict,
-            'est_note_events': est_note_events,
-            'est_pedal_events': est_pedal_events}
-
-        return transcribed_dict
+        return midi_file
 
     def enframe(self, x, segment_samples):
         """Enframe long sequence to short segments.
