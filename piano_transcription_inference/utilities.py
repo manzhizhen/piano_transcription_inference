@@ -678,19 +678,27 @@ def load_audio(path, sr=22050, mono=True, offset=0.0, duration=None,
     return (y, sr)
 
 
-def load_audio_from_recording(recording, sr_native, sr=22050, mono=True, res_type='kaiser_best'):
+def load_audio_from_recording(recording, sr_ori, sr=22050, mono=True, res_type='kaiser_best'):
     """load_audio 方法是处理一个文件，但我们期望能直接从麦克风例如sounddevice.rec方法返回的数据来直接进行处理"""
-    y = np.array(recording)  # 将sounddevice.rec()返回的数据转换为numpy数组
+    y = np.array(recording, dtype=np.float32)  # 将sounddevice.rec()返回的数据转换为numpy数组
 
     if y.size == 0:
         raise ValueError("输入的录音数据为空")
+
+    # 计算原始录音的时长
+    recording_duration = y.shape[0] / sr_ori
+    print(f"原始录音recording时长: {recording_duration} 秒")
 
     if y.ndim > 1:
         if mono:
             y = np.mean(y, axis=1)  # 如果需要转换为单声道，则取平均值
 
-    if sr is not None and sr_native is not None and sr_native != sr:
-        y = librosa.core.audio.resample(y, sr_native, sr, res_type=res_type)  # 如果需要重新采样，则进行重新采样
+    if sr is not None and sr_ori is not None and sr_ori != sr:
+        y = librosa.core.audio.resample(y, sr_ori, sr, res_type=res_type)  # 如果需要重新采样，则进行重新采样
+
+    # 计算处理后音频的时长
+    y_duration = y.shape[0] / sr
+    print(f"处理后音频y时长: {y_duration} 秒")
 
     return (y, sr)
 
